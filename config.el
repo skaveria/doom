@@ -18,6 +18,12 @@
 ;;; Core Doom settings (set before packages load)
 ;;; ---------------------------------------------------------------------------
 
+;; Keep Customize noise out of config.el.
+;; Your repo already has doom/custom.el; this makes it the canonical sink.
+(setq custom-file (expand-file-name "custom.el" doom-user-dir))
+(when (file-exists-p custom-file)
+  (load custom-file 'noerror 'nomessage))
+
 ;; Doom exposes five (optional) variables for controlling fonts in Doom:
 ;;
 ;; - `doom-font' -- the primary font to use
@@ -96,9 +102,49 @@
 
 (after! corfu
   (setq corfu-auto t
-        corfu-auto-delay 0.12
-        corfu-auto-prefix 2
+        ;; Aggressive is fine if it's effectively instant.
+        corfu-auto-delay 0.0
+        corfu-auto-prefix 1
         corfu-cycle t))
+
+;;; ---------------------------------------------------------------------------
+;;; LSP / IDE brain (polite delivery)
+;;; ---------------------------------------------------------------------------
+
+;; Your stated preference:
+;; - full IDE capability
+;; - diagnostics only when you ask (hover/list), not constant visual nagging
+
+;; Eglot is enabled via :tools (lsp +eglot) in init.el.
+;; Keep it fast, quiet, and low-noise.
+(after! eglot
+  (setq eglot-autoshutdown t
+        eglot-sync-connect nil
+        eglot-events-buffer-size 0)
+  ;; Keep eldoc "hover" compact.
+  (after! eldoc
+    (setq eldoc-echo-area-use-multiline-p nil)))
+
+;; Flycheck is still your on-demand "list errors" surface.
+;; We keep the checks, but reduce constant visual anxiety.
+(after! flycheck
+  ;; Keep checks snappy, but avoid a constant red/green lightshow.
+  (setq flycheck-check-syntax-automatically '(save idle-change mode-enabled)
+        flycheck-idle-change-delay 0.8
+        flycheck-display-errors-delay 0.25)
+  ;; Minimal visuals: no fringe indicators, no noisy error highlighting by default.
+  (setq flycheck-indication-mode nil)
+  (setq flycheck-highlighting-mode nil))
+
+;; Leader shortcuts for "ask for diagnostics":
+;; - hover current issue (eldoc)
+;; - list issues (flycheck)
+(map! :leader
+      (:prefix ("c" . "code")
+       :desc "Hover docs/diagnostics (eldoc)" "h" #'eldoc
+       :desc "List diagnostics"            "l" #'flycheck-list-errors
+       :desc "Next diagnostic"            "n" #'flycheck-next-error
+       :desc "Prev diagnostic"            "p" #'flycheck-previous-error))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Modeline / frame
@@ -168,20 +214,20 @@
 ;;; Elisp lab space: *scratch* as a real REPL notebook
 ;;; ---------------------------------------------------------------------------
 
+(defun nk/scratch-setup ()
+  "Polish *scratch*: elisp mode, no line numbers, predictable insert state."
+  (when (string= (buffer-name) "*scratch*")
+    (emacs-lisp-mode)
+    (setq-local display-line-numbers nil)
+    (setq-local truncate-lines nil)
+    (setq-local comment-start ";; ")
+    (setq-local comment-end "")
+    (rainbow-delimiters-mode 1)
+    (show-paren-mode 1)))
+
 (after! emacs-lisp
   (setq initial-major-mode 'emacs-lisp-mode
         initial-scratch-message "")
-
-  (defun nk/scratch-setup ()
-    "Polish *scratch*: elisp mode, no line numbers, predictable insert state."
-    (when (string= (buffer-name) "*scratch*")
-      (emacs-lisp-mode)
-      (setq-local display-line-numbers nil)
-      (setq-local truncate-lines nil)
-      (setq-local comment-start ";; ")
-      (setq-local comment-end "")
-      (rainbow-delimiters-mode 1)
-      (show-paren-mode 1)))
 
   (add-hook 'emacs-lisp-mode-hook #'nk/scratch-setup)
 

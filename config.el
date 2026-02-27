@@ -342,6 +342,6 @@
 (tool-bar-mode -1)
 
 ;; Native tab bar (optional)
-(tab-bar-mode 1)
+(tab-bar-mode nil)
 
 (boundp 'mac-use-metal)

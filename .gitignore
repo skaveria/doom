@@ -1,0 +1,22 @@
+# Doom/Emacs build artifacts
+*.elc
+*.eln
+.cache/
+.auto-save-list/
+tramp
+eln-cache/
+eshell/history
+ido.last
+recentf
+bookmarks
+places
+
+# OS junk
+.DS_Store
+
+# Doom local state should NOT live in this repo
+/.local/
+
+# Optional: if you don't want auto-generated customizations tracked
+# (Uncomment to ignore custom.el)
+# custom.el

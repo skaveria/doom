@@ -167,6 +167,34 @@
          (cider-repl-mode . rainbow-delimiters-mode)))
 
 ;;; ---------------------------------------------------------------------------
+;;; ELisp: CIDER-ish evaluation UX (scratch/ielm)
+;;; ---------------------------------------------------------------------------
+
+(use-package! eros
+  :hook ((emacs-lisp-mode . eros-mode)
+         (ielm-mode . eros-mode)))
+
+(use-package! eval-sexp-fu
+  :hook ((emacs-lisp-mode . eval-sexp-fu-flash-mode)
+         (ielm-mode . eval-sexp-fu-flash-mode)))
+
+(use-package! helpful
+  :commands (helpful-callable helpful-variable helpful-command helpful-key helpful-at-point))
+
+(defun nk/elisp-ciderish-keys ()
+  "CIDER-like keybindings for ELisp buffers (esp *scratch*)."
+  ;; Evaluation (CIDER muscle memory)
+  (local-set-key (kbd "C-c C-e") #'eval-last-sexp)
+  (local-set-key (kbd "C-c C-r") #'eval-region)
+  (local-set-key (kbd "C-c C-k") #'eval-buffer)
+  (local-set-key (kbd "C-c C-z") #'ielm)
+  ;; Docs (Helpfully)
+  (local-set-key (kbd "C-c C-d d") #'helpful-at-point)
+  (local-set-key (kbd "C-c C-d f") #'helpful-callable)
+  (local-set-key (kbd "C-c C-d v") #'helpful-variable)
+  (local-set-key (kbd "C-c C-d k") #'helpful-key))
+
+;;; ---------------------------------------------------------------------------
 ;;; CIDER (minimal + stable)
 ;;; ---------------------------------------------------------------------------
 
@@ -222,8 +250,17 @@
     (setq-local truncate-lines nil)
     (setq-local comment-start ";; ")
     (setq-local comment-end "")
-    (rainbow-delimiters-mode 1)
-    (show-paren-mode 1)))
+    ;; CIDER-ish feel
+    (when (fboundp 'rainbow-delimiters-mode) (rainbow-delimiters-mode 1))
+    (when (fboundp 'smartparens-mode) (smartparens-mode 1))
+    (show-paren-local-mode 1)
+    (eldoc-mode 1)
+    (font-lock-mode 1)
+    ;; Inline eval results + sexp flash (if installed)
+    (when (fboundp 'eros-mode) (eros-mode 1))
+    (when (fboundp 'eval-sexp-fu-flash-mode) (eval-sexp-fu-flash-mode 1))
+    ;; Keybinds that match your CIDER hands
+    (nk/elisp-ciderish-keys)))
 
 (after! emacs-lisp
   (setq initial-major-mode 'emacs-lisp-mode

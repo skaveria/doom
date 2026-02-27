@@ -1,5 +1,28 @@
 ;;; $DOOMDIR/config.el -*- lexical-binding: t; -*-
 
+;;; ---------------------------------------------------------------------------
+;;; Safety fuse: prevent beachball on small .el files (e.g. diffinator.el)
+;;; ---------------------------------------------------------------------------
+
+(defun nk/elisp-lightweight-buffer-p ()
+  "Return non-nil if current buffer should avoid heavy IDE features."
+  (let ((f (buffer-file-name)))
+    (and f
+         ;; Your local lisp utilities: keep them snappy.
+         (string-match-p "/\\.config/doom/lisp/.*\\.el\\'" f))))
+
+(defun nk/elisp-lightweight-setup ()
+  "Disable heavy features in lightweight elisp buffers."
+  (when (nk/elisp-lightweight-buffer-p)
+    ;; These are common beachball culprits.
+    (when (bound-and-true-p flycheck-mode) (flycheck-mode -1))
+    (when (bound-and-true-p flymake-mode)  (flymake-mode -1))
+    ;; Don't even try to attach LSP to tiny local utility files.
+    (when (fboundp 'eglot-shutdown)
+      (ignore-errors (eglot-shutdown)))))
+
+(add-hook 'emacs-lisp-mode-hook #'nk/elisp-lightweight-setup)
+
 ;; Doom note: you do NOT need to run `doom sync` after editing this file.
 ;; Keep it runway-clean: stable defaults up top, package config below.
 ;;
@@ -242,10 +265,45 @@
 ;;; Elisp lab space: *scratch* as a real REPL notebook
 ;;; ---------------------------------------------------------------------------
 
+(defvar nk--scratch-applying? nil
+  "Non-nil while applying scratch policy (prevents re-entrancy loops).")
+
+(defun nk/scratch-buffer-p (&optional buf)
+  "Return non-nil if BUF (or current buffer) is a *scratch* buffer.
+
+Matches *scratch* and *scratch*<N> variants."
+  (let ((name (buffer-name (or buf (current-buffer)))))
+    (and (stringp name)
+         (string-match-p "\\`\\*scratch\\*" name))))
+
+(defun nk/scratch-apply-policy ()
+  "Make *scratch* behave like a quiet ELisp notebook."
+  (when (and (nk/scratch-buffer-p)
+             (not nk--scratch-applying?))
+    (let ((nk--scratch-applying? t))
+      ;; Always Emacs Lisp in *scratch*.
+      (unless (derived-mode-p 'emacs-lisp-mode)
+        (emacs-lisp-mode))
+
+      ;; Make diagnostics opt-in in scratch. No auto-lint yelling.
+      (setq-local flycheck-check-syntax-automatically nil)
+      (setq-local flycheck-disabled-checkers
+                  (append flycheck-disabled-checkers
+                          '(emacs-lisp-checkdoc emacs-lisp-package)))
+      ;; If Flycheck is on, keep it quiet in scratch buffers.
+      (when (bound-and-true-p flycheck-mode)
+        (flycheck-mode -1))
+      ;; Also disable Flymake/checkdoc (these can produce the same purple nags).
+      (when (fboundp 'flymake-mode)
+        (flymake-mode -1))
+      (when (fboundp 'checkdoc-minor-mode)
+        (checkdoc-minor-mode -1)))))
+
 (defun nk/scratch-setup ()
   "Polish *scratch*: elisp mode, no line numbers, predictable insert state."
-  (when (string= (buffer-name) "*scratch*")
-    (emacs-lisp-mode)
+  (when (nk/scratch-buffer-p)
+    ;; First: enforce scratch policy (mode + quiet).
+    (nk/scratch-apply-policy)
     (setq-local display-line-numbers nil)
     (setq-local truncate-lines nil)
     (setq-local comment-start ";; ")
@@ -266,10 +324,22 @@
   (setq initial-major-mode 'emacs-lisp-mode
         initial-scratch-message "")
 
+  ;; Apply polish when entering elisp buffers, and force scratch to elisp.
   (add-hook 'emacs-lisp-mode-hook #'nk/scratch-setup)
+  ;; Doom may reset *scratch* after startup; re-assert policy when modes change.
+  (add-hook 'doom-first-buffer-hook #'nk/scratch-apply-policy)
+  (add-hook 'after-change-major-mode-hook #'nk/scratch-apply-policy)
+  (add-hook 'after-revert-hook #'nk/scratch-apply-policy)
+  ;; If Flycheck ever gets enabled later, re-apply scratch policy immediately.
+  (after! flycheck
+    (add-hook 'flycheck-mode-hook
+              (lambda ()
+                (when (nk/scratch-buffer-p)
+                  (nk/scratch-apply-policy)))))
 
   ;; Make sure the *scratch* buffer that already exists gets polished too.
   (with-current-buffer (get-buffer-create "*scratch*")
+    (nk/scratch-apply-policy)
     (nk/scratch-setup))
 
   ;; If you use Evil, keep *scratch* in insert by default.
@@ -397,6 +467,8 @@
 ;; Transparent titlebar (modern macOS)
 (setq ns-transparent-titlebar t)
 
-;; Metal rendering (Mac Port only; harmless if unsupported)
-(when (boundp 'mac-use-metal)
-  (setq mac-use-metal t))
+;; Metal rendering (Mac Port):
+;; Leave OFF for now; it can be crashy on some macOS/Emacs-mac combos.
+;; Once you're stable, we can re-enable and test deliberately.
+;; (when (boundp 'mac-use-metal)
+;;   (setq mac-use-metal t))

@@ -14,6 +14,16 @@
   "Apply pasted diffs to files/buffers."
   :group 'tools)
 
+(defcustom diffinator-git-apply-extra-args nil
+  "Extra args appended to `git apply` invocations.
+
+Example:
+  '(\"--ignore-space-change\" \"--ignore-whitespace\")
+
+This is appended after diffinator's default args and before the patch path."
+  :type '(repeat string)
+  :group 'diffinator)
+
 (defcustom diffinator-git-executable "git"
   "Git executable to use for applying diffs."
   :type 'string
@@ -139,12 +149,22 @@ This keeps `git apply` happy when we apply against a temp snapshot named basenam
     (insert (with-current-buffer buf
               (buffer-substring-no-properties (point-min) (point-max))))))
 
-(defun diffinator--git-apply (dir patch-path)
-  "Run `git apply` on PATCH-PATH in DIR. Return plist."
+(defun diffinator--git-apply (dir patch-path &optional ignore-ws)
+  "Run `git apply` on PATCH-PATH in DIR. Return plist.
+
+When IGNORE-WS is non-nil, retry-friendly whitespace matching is enabled."
   (let* ((default-directory dir)
          (out (generate-new-buffer " *diffinator git out*"))
          (err (generate-new-buffer " *diffinator git err*"))
-         (argv (list "apply" "--unsafe-paths" "--whitespace=nowarn" "--recount" patch-path))
+         (argv (append
+                (list "apply"
+                      "--unsafe-paths"
+                      "--whitespace=nowarn"
+                      "--recount")
+                (when ignore-ws
+                  (list "--ignore-space-change" "--ignore-whitespace"))
+                diffinator-git-apply-extra-args
+                (list patch-path)))
          exit-code stdout stderr)
     (unwind-protect
         (let ((standard-error err))
@@ -167,7 +187,11 @@ This keeps `git apply` happy when we apply against a temp snapshot named basenam
         (progn
           (diffinator--write-buffer-to buf workfile)
           (diffinator--write-string patchfile normalized)
-          (let ((res (diffinator--git-apply tmpdir patchfile)))
+          (let* ((res (diffinator--git-apply tmpdir patchfile nil))
+                 (res (if (plist-get res :ok)
+                          res
+                        ;; Retry once with whitespace-insensitive matching.
+                        (diffinator--git-apply tmpdir patchfile t))))
             (if (plist-get res :ok)
                 (let ((newtext (with-temp-buffer
                                  (insert-file-contents workfile)

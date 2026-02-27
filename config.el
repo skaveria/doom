@@ -66,7 +66,7 @@
 ;; - `scroll-margin` kept small (0) for precision; bump to 4–8 if you want “cozy”.
 (setq scroll-margin 0
       scroll-step 1
-      scroll-conservatively 0
+      scroll-conservatively 1
       scroll-preserve-screen-position t
       auto-window-vscroll t)
 
@@ -323,3 +323,25 @@
 
 (map! :leader
       :desc "Pretty-print ELisp" "e p" #'nk/pp)
+
+;; Mac port tuning
+(setq mac-command-modifier 'meta
+      mac-option-modifier 'super
+      mac-control-modifier 'control)
+
+;; Smooth scrolling
+(setq pixel-scroll-precision-mode t)
+
+;; Native fullscreen
+(setq ns-use-native-fullscreen t)
+
+;; Transparent titlebar (modern macOS)
+(setq ns-transparent-titlebar t)
+
+;; Remove ugly toolbar
+(tool-bar-mode -1)
+
+;; Native tab bar (optional)
+(tab-bar-mode 1)
+
+(boundp 'mac-use-metal)

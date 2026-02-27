@@ -279,20 +279,41 @@
 ;;; Eshell — control plane, not a POSIX cosplay
 ;;; ---------------------------------------------------------------------------
 
+(defun nk/eshell-lisp-goodness ()
+  "Make Eshell feel like a Lisp buffer (rainbow parens, SP, etc), persistently."
+  (interactive)
+  ;; Keep it buffer-local and non-destructive to Eshell semantics.
+  (setq-local display-line-numbers nil)
+  (visual-line-mode 1)
+  (electric-pair-local-mode +1)
+  (show-paren-local-mode +1)
+
+  (when (fboundp 'smartparens-mode)
+    (smartparens-mode +1))
+  (when (fboundp 'rainbow-delimiters-mode)
+    (rainbow-delimiters-mode +1))
+
+  ;; Ensure faces apply after prompt/output changes.
+  (when (fboundp 'font-lock-flush)
+    (font-lock-flush)))
+
 (after! eshell
   (setq eshell-banner-message ""
         eshell-history-size 10000
         eshell-hist-ignoredups t
         eshell-scroll-to-bottom-on-input t
         eshell-scroll-to-bottom-on-output t
-        eshell-prefer-lisp-functions t)
+        eshell-prefer-lisp-functions t
+        eshell-highlight-prompt nil)
 
-  (add-hook 'eshell-mode-hook
+  (add-hook 'eshell-mode-hook #'nk/eshell-lisp-goodness)
+
+  ;; Doom/Eshell can recreate buffers/prompts in a way that "loses" minor-mode feel.
+  ;; This re-applies the goodies after commands, without changing Eshell behavior.
+  (add-hook 'eshell-post-command-hook
             (lambda ()
-              (setq-local display-line-numbers nil)
-              (visual-line-mode 1)
-              (rainbow-delimiters-mode 1)
-              (show-paren-mode 1))))
+              (when (derived-mode-p 'eshell-mode)
+                (nk/eshell-lisp-goodness)))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Runway utilities (tiny, composable, and worth keeping)
@@ -330,7 +351,8 @@
       mac-control-modifier 'control)
 
 ;; Smooth scrolling
-(setq pixel-scroll-precision-mode t)
+;; NOTE: You intentionally keep pixel-precision scrolling OFF earlier for glassy stability.
+;; Leave it off here too (don't set the mode variable directly).
 
 ;; Native fullscreen
 (setq ns-use-native-fullscreen t)
@@ -338,10 +360,6 @@
 ;; Transparent titlebar (modern macOS)
 (setq ns-transparent-titlebar t)
 
-;; Remove ugly toolbar
-(tool-bar-mode -1)
-
-;; Native tab bar (optional)
-(tab-bar-mode nil)
-
-(boundp 'mac-use-metal)
+;; Metal rendering (Mac Port only; harmless if unsupported)
+(when (boundp 'mac-use-metal)
+  (setq mac-use-metal t))

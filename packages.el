@@ -9,3 +9,6 @@
 (package! eros)
 (package! eval-sexp-fu)
 (package! helpful)
+
+(package! ember-theme
+  :recipe (:host github :repo "ember-theme/emacs"))

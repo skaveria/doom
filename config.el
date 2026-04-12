@@ -1,474 +1,151 @@
 ;;; $DOOMDIR/config.el -*- lexical-binding: t; -*-
 
-;;; ---------------------------------------------------------------------------
-;;; Safety fuse: prevent beachball on small .el files (e.g. diffinator.el)
-;;; ---------------------------------------------------------------------------
-
-(defun nk/elisp-lightweight-buffer-p ()
-  "Return non-nil if current buffer should avoid heavy IDE features."
-  (let ((f (buffer-file-name)))
-    (and f
-         ;; Your local lisp utilities: keep them snappy.
-         (string-match-p "/\\.config/doom/lisp/.*\\.el\\'" f))))
-
-(defun nk/elisp-lightweight-setup ()
-  "Disable heavy features in lightweight elisp buffers."
-  (when (nk/elisp-lightweight-buffer-p)
-    ;; These are common beachball culprits.
-    (when (bound-and-true-p flycheck-mode) (flycheck-mode -1))
-    (when (bound-and-true-p flymake-mode)  (flymake-mode -1))
-    ;; Don't even try to attach LSP to tiny local utility files.
-    (when (fboundp 'eglot-shutdown)
-      (ignore-errors (eglot-shutdown)))))
-
-(add-hook 'emacs-lisp-mode-hook #'nk/elisp-lightweight-setup)
-
-;; Doom note: you do NOT need to run `doom sync` after editing this file.
-;; Keep it runway-clean: stable defaults up top, package config below.
-;;
-;; Design goals:
-;; - quiet, cozy, low-friction UX (Apple Silicon friendly)
-;; - one source of truth per behavior (no duplicate/conflicting knobs)
-;; - buffer-local polish for REPL-ish buffers (scratch/ielm/eshell)
-;; - keymaps that never steal your literal spacebar in insert (espanso-safe)
-
-;; Some functionality uses this to identify you, e.g. GPG configuration, email
-;; clients, file templates and snippets. It is optional.
-;; (setq user-full-name "John Doe"
-;;       user-mail-address "john@doe.com")
-
-;;; ---------------------------------------------------------------------------
-;;; Core Doom settings (set before packages load)
-;;; ---------------------------------------------------------------------------
-
-;; Keep Customize noise out of config.el.
-;; Your repo already has doom/custom.el; this makes it the canonical sink.
 (setq custom-file (expand-file-name "custom.el" doom-user-dir))
-(when (file-exists-p custom-file)
-  (load custom-file 'noerror 'nomessage))
+(load custom-file 'noerror 'nomessage)
 
-;; Doom exposes five (optional) variables for controlling fonts in Doom:
-;;
-;; - `doom-font' -- the primary font to use
-;; - `doom-variable-pitch-font' -- a non-monospace font (where applicable)
-;; - `doom-big-font' -- used for `doom-big-font-mode'; use this for
-;;   presentations or streaming.
-;; - `doom-symbol-font' -- for symbols
-;; - `doom-serif-font' -- for the `fixed-pitch-serif' face
-;;
-;; See 'C-h v doom-font' for documentation and more examples of what they
-;; accept. For example:
-;;
-(setq doom-font (font-spec :family "MonoLisa MonoLisaSkav" :size 12 :weight 'semi-light)
-      doom-variable-pitch-font (font-spec :family "MonoLisa MonoLisaSkav" :size 13))
+;; Identity
+;; (setq user-full-name "Nichole Kernreicht"
+;;       user-mail-address "you@example.com")
 
-;; If you or Emacs can't find your font, use 'M-x describe-font' to look them
-;; up, `M-x eval-region' to execute elisp code, and 'M-x doom/reload-font' to
-;; refresh your font settings. If Emacs still can't find your font, it likely
-;; wasn't installed correctly. Font issues are rarely Doom issues!
+;; Theme / fonts
+(setq doom-font (font-spec :family "MonoLisa" :size 12 :weight 'semi-light)
+      doom-variable-pitch-font (font-spec :family "MonoLisa" :size 13)
+      display-line-numbers-type 'relative
+      org-directory "~/org/")
 
-(setq doom-theme 'doom-molokai)
-(setq display-line-numbers-type t)
-(setq org-directory "~/org/")
-(setq fancy-splash-image "~/.config/doom/pc.jpg")
+(add-to-list 'custom-theme-load-path "~/.config/doom/themes/ember/")
+(load-theme 'ember t)
 
-;;; ---------------------------------------------------------------------------
-;;; UI / comfort
-;;; ---------------------------------------------------------------------------
-
-;; Softer cursor / less visual violence
-(blink-cursor-mode 0)
+;; Basic UI
+(blink-cursor-mode -1)
 (setq-default cursor-type 'bar)
 
-;; Fewer sharp edges
 (setq confirm-kill-emacs nil
-      ring-bell-function #'ignore)
+      ring-bell-function #'ignore
+      ns-use-proxy-icon nil
+      frame-title-format '("%b — Doom Emacs"))
 
-;;; Scrolling (Apple Silicon smooth mode)
-;; - `scroll-conservatively 0` plays nicer with modern pixel-ish rendering.
-;; - `scroll-margin` kept small (0) for precision; bump to 4–8 if you want “cozy”.
-(setq scroll-margin 0
-      scroll-step 1
-      scroll-conservatively 1
-      scroll-preserve-screen-position t
-      auto-window-vscroll t)
+;; Editing defaults
+(delete-selection-mode 1)
 
-;; Pixel-precision scrolling (Emacs 29+)
-;; On some Apple Silicon + Retina + Metal builds this can cause subtle jitter/tearing.
-;; Keep it OFF for glassy scrolling; re-enable if your setup behaves.
-(when (fboundp 'pixel-scroll-precision-mode)
-  (pixel-scroll-precision-mode -1))
-
-;; Help Retina resizing avoid micro-jitter.
-(setq frame-resize-pixelwise t)
-
-;;; Editing ergonomics
-(delete-selection-mode 1)        ; typing replaces selection
-(setq mouse-autoselect-window t) ; focus follows mouse (intentional)
-
-;; File / buffer comfort
 (setq-default tab-width 2
               indent-tabs-mode nil
               fill-column 90)
 
-;; Don't yank me around with popups
-(setq +popup-defaults '(:quit t :select ignore :ttl nil))
+;; Scrolling
+(setq scroll-margin 0
+      scroll-step 1
+      scroll-conservatively 101
+      scroll-preserve-screen-position t
+      auto-window-vscroll t
+      frame-resize-pixelwise t)
 
-;;; ---------------------------------------------------------------------------
-;;; Completion (Vertico / Corfu)
-;;; ---------------------------------------------------------------------------
+(when (fboundp 'pixel-scroll-precision-mode)
+  (pixel-scroll-precision-mode -1))
 
+;; Performance / LSP friendliness
+(setq gc-cons-threshold (* 100 1024 1024)
+      read-process-output-max (* 1024 1024))
+
+;; Vertico
 (after! vertico
   (setq vertico-count 12
         vertico-resize t
         vertico-cycle t))
 
+;; Corfu
 (after! corfu
   (setq corfu-auto t
-        ;; Aggressive is fine if it's effectively instant.
-        corfu-auto-delay 0.0
-        corfu-auto-prefix 1
+        corfu-auto-delay 0.1
+        corfu-auto-prefix 2
         corfu-cycle t))
 
-;;; ---------------------------------------------------------------------------
-;;; LSP / IDE brain (polite delivery)
-;;; ---------------------------------------------------------------------------
-
-;; Your stated preference:
-;; - full IDE capability
-;; - diagnostics only when you ask (hover/list), not constant visual nagging
-
-;; Eglot is enabled via :tools (lsp +eglot) in init.el.
-;; Keep it fast, quiet, and low-noise.
+;; Eglot / Eldoc
 (after! eglot
   (setq eglot-autoshutdown t
         eglot-sync-connect nil
-        eglot-events-buffer-size 0)
-  ;; Keep eldoc "hover" compact.
-  (after! eldoc
-    (setq eldoc-echo-area-use-multiline-p nil)))
+        eglot-events-buffer-size 0))
 
-;; Flycheck is still your on-demand "list errors" surface.
-;; We keep the checks, but reduce constant visual anxiety.
+(after! eldoc
+  (setq eldoc-echo-area-use-multiline-p nil))
+
+;; Flycheck: useful, but calmer
 (after! flycheck
-  ;; Keep checks snappy, but avoid a constant red/green lightshow.
-  (setq flycheck-check-syntax-automatically '(save idle-change mode-enabled)
-        flycheck-idle-change-delay 0.8
-        flycheck-display-errors-delay 0.25)
-  ;; Minimal visuals: no fringe indicators, no noisy error highlighting by default.
-  (setq flycheck-indication-mode nil)
-  (setq flycheck-highlighting-mode nil))
+  (setq flycheck-check-syntax-automatically '(save mode-enabled)
+        flycheck-display-errors-delay 0.25
+        flycheck-indication-mode nil))
 
-;; Leader shortcuts for "ask for diagnostics":
-;; - hover current issue (eldoc)
-;; - list issues (flycheck)
-(map! :leader
-      (:prefix ("c" . "code")
-       :desc "Hover docs/diagnostics (eldoc)" "h" #'eldoc
-       :desc "List diagnostics"            "l" #'flycheck-list-errors
-       :desc "Next diagnostic"            "n" #'flycheck-next-error
-       :desc "Prev diagnostic"            "p" #'flycheck-previous-error))
-
-;;; ---------------------------------------------------------------------------
-;;; Modeline / frame
-;;; ---------------------------------------------------------------------------
-
+;; Modeline
 (setq doom-modeline-height 28
       doom-modeline-bar-width 3
       doom-modeline-buffer-file-name-style 'truncate-upto-root
       doom-modeline-major-mode-icon t)
 
-(setq ns-use-proxy-icon nil
-      frame-title-format '("%b — Emacs"))
+;; Rainbow delimiters in code buffers
+(add-hook 'prog-mode-hook #'rainbow-delimiters-mode)
+
+;; macOS
+(setq mac-command-modifier 'super
+      mac-option-modifier 'meta
+      mac-control-modifier 'control
+      ns-command-modifier 'super
+      ns-option-modifier 'meta
+      ns-control-modifier 'control
+      ns-use-native-fullscreen t
+      ns-transparent-titlebar t)
+
+(setq fancy-splash-image "~/.config/doom/pc.jpg")
 
 ;;; ---------------------------------------------------------------------------
-;;; Delimiters
+;;; vterm — fast, clean, usable
 ;;; ---------------------------------------------------------------------------
 
-(use-package! rainbow-delimiters
-  :hook ((prog-mode . rainbow-delimiters-mode)
-         (cider-repl-mode . rainbow-delimiters-mode)))
+(after! vterm
+  ;; performance / feel
+  (setq vterm-max-scrollback 10000
+        vterm-kill-buffer-on-exit t
+        vterm-timer-delay 0.01
+        vterm-enable-manual-redraw t
+        vterm-term-environment-variable "xterm-256color")
 
-;;; ---------------------------------------------------------------------------
-;;; ELisp: CIDER-ish evaluation UX (scratch/ielm)
-;;; ---------------------------------------------------------------------------
+  ;; nicer default shell (optional but good)
+  (setq vterm-shell "/bin/zsh"))
 
-(use-package! eros
-  :hook ((emacs-lisp-mode . eros-mode)
-         (ielm-mode . eros-mode)))
+;; buffer behavior
+(add-hook 'vterm-mode-hook
+          (lambda ()
+            ;; no visual clutter
+            (display-line-numbers-mode -1)
+            (setq-local truncate-lines nil)
+            (visual-line-mode 1)
 
-(use-package! eval-sexp-fu
-  :hook ((emacs-lisp-mode . eval-sexp-fu-flash-mode)
-         (ielm-mode . eval-sexp-fu-flash-mode)))
+            ;; smoother feel
+            (setq-local scroll-margin 0)
 
-(use-package! helpful
-  :commands (helpful-callable helpful-variable helpful-command helpful-key helpful-at-point))
+            ;; cursor
+            (setq-local cursor-type 'bar)))
 
-(defun nk/elisp-ciderish-keys ()
-  "CIDER-like keybindings for ELisp buffers (esp *scratch*)."
-  ;; Evaluation (CIDER muscle memory)
-  (local-set-key (kbd "C-c C-e") #'eval-last-sexp)
-  (local-set-key (kbd "C-c C-r") #'eval-region)
-  (local-set-key (kbd "C-c C-k") #'eval-buffer)
-  (local-set-key (kbd "C-c C-z") #'ielm)
-  ;; Docs (Helpfully)
-  (local-set-key (kbd "C-c C-d d") #'helpful-at-point)
-  (local-set-key (kbd "C-c C-d f") #'helpful-callable)
-  (local-set-key (kbd "C-c C-d v") #'helpful-variable)
-  (local-set-key (kbd "C-c C-d k") #'helpful-key))
+;; keybindings — make vterm actually usable
+(map! :map vterm-mode-map
+      :i "C-c C-c" #'vterm-send-C-c
+      :i "C-c C-z" #'vterm-copy-mode
+      :i "C-c C-k" #'vterm-clear
+      :i "C-c C-l" #'vterm-clear-scrollback)
 
-;;; ---------------------------------------------------------------------------
-;;; CIDER (minimal + stable)
-;;; ---------------------------------------------------------------------------
+(map! :map vterm-copy-mode-map
+      :n "q" #'vterm-copy-mode-done)
+
+;; quick launcher
+(map! :leader
+      :desc "Open vterm" "o t" #'vterm)
 
 (after! cider
-  (setq cider-repl-display-in-current-window t)
-  (set-popup-rule! "^\\*cider-repl" :ignore t))
+  (set-popup-rule! "^\\*cider-repl"
+    :ignore t))
 
-(defvar nk/uai-nrepl-host "192.168.0.105"
-  "Host running the Unaccounted Intelligence nREPL server.")
+(after! cider
+  ;; rainbow delimiters in REPL
+  (add-hook 'cider-repl-mode-hook #'rainbow-delimiters-mode)
 
-(defvar nk/uai-nrepl-port 7888
-  "Port for the Unaccounted Intelligence nREPL server.")
-
-(defun nk/cider-connect-uai ()
-  "Connect CIDER to the UAI nREPL server (remote), without jack-in."
-  (interactive)
-  (require 'cider)
-  (let ((cider-host nk/uai-nrepl-host)
-        (cider-port nk/uai-nrepl-port))
-    (cider-connect-clj (list :host cider-host :port cider-port))))
-
-;;; ---------------------------------------------------------------------------
-;;; Local tooling: diffinator
-;;; ---------------------------------------------------------------------------
-
-(when (file-exists-p (expand-file-name "lisp/diffinator.el" doom-user-dir))
-  (load! "lisp/diffinator" doom-user-dir))
-
-;; Always allow SPC c p (even in insert/emacs state; avoids M-SPC / espanso).
-(after! general
-  (when (fboundp 'diffinator-apply-diff-from-kill)
-    ;; Leader sequence in normal-ish states (doesn't affect typing)
-    (general-define-key
-     :states '(normal visual motion)
-     :keymaps 'override
-     "SPC c p" #'diffinator-apply-diff-from-kill)
-
-    ;; Insert/emacs state: use a non-space chord (safe for typing)
-    (general-define-key
-     :states '(insert emacs)
-     :keymaps 'override
-     "C-c p" #'diffinator-apply-diff-from-kill)))
-
-;;; ---------------------------------------------------------------------------
-;;; Elisp lab space: *scratch* as a real REPL notebook
-;;; ---------------------------------------------------------------------------
-
-(defvar nk--scratch-applying? nil
-  "Non-nil while applying scratch policy (prevents re-entrancy loops).")
-
-(defun nk/scratch-buffer-p (&optional buf)
-  "Return non-nil if BUF (or current buffer) is a *scratch* buffer.
-
-Matches *scratch* and *scratch*<N> variants."
-  (let ((name (buffer-name (or buf (current-buffer)))))
-    (and (stringp name)
-         (string-match-p "\\`\\*scratch\\*" name))))
-
-(defun nk/scratch-apply-policy ()
-  "Make *scratch* behave like a quiet ELisp notebook."
-  (when (and (nk/scratch-buffer-p)
-             (not nk--scratch-applying?))
-    (let ((nk--scratch-applying? t))
-      ;; Always Emacs Lisp in *scratch*.
-      (unless (derived-mode-p 'emacs-lisp-mode)
-        (emacs-lisp-mode))
-
-      ;; Make diagnostics opt-in in scratch. No auto-lint yelling.
-      (setq-local flycheck-check-syntax-automatically nil)
-      (setq-local flycheck-disabled-checkers
-                  (append flycheck-disabled-checkers
-                          '(emacs-lisp-checkdoc emacs-lisp-package)))
-      ;; If Flycheck is on, keep it quiet in scratch buffers.
-      (when (bound-and-true-p flycheck-mode)
-        (flycheck-mode -1))
-      ;; Also disable Flymake/checkdoc (these can produce the same purple nags).
-      (when (fboundp 'flymake-mode)
-        (flymake-mode -1))
-      (when (fboundp 'checkdoc-minor-mode)
-        (checkdoc-minor-mode -1)))))
-
-(defun nk/scratch-setup ()
-  "Polish *scratch*: elisp mode, no line numbers, predictable insert state."
-  (when (nk/scratch-buffer-p)
-    ;; First: enforce scratch policy (mode + quiet).
-    (nk/scratch-apply-policy)
-    (setq-local display-line-numbers nil)
-    (setq-local truncate-lines nil)
-    (setq-local comment-start ";; ")
-    (setq-local comment-end "")
-    ;; CIDER-ish feel
-    (when (fboundp 'rainbow-delimiters-mode) (rainbow-delimiters-mode 1))
-    (when (fboundp 'smartparens-mode) (smartparens-mode 1))
-    (show-paren-local-mode 1)
-    (eldoc-mode 1)
-    (font-lock-mode 1)
-    ;; Inline eval results + sexp flash (if installed)
-    (when (fboundp 'eros-mode) (eros-mode 1))
-    (when (fboundp 'eval-sexp-fu-flash-mode) (eval-sexp-fu-flash-mode 1))
-    ;; Keybinds that match your CIDER hands
-    (nk/elisp-ciderish-keys)))
-
-(after! emacs-lisp
-  (setq initial-major-mode 'emacs-lisp-mode
-        initial-scratch-message "")
-
-  ;; Apply polish when entering elisp buffers, and force scratch to elisp.
-  (add-hook 'emacs-lisp-mode-hook #'nk/scratch-setup)
-  ;; Doom may reset *scratch* after startup; re-assert policy when modes change.
-  (add-hook 'doom-first-buffer-hook #'nk/scratch-apply-policy)
-  (add-hook 'after-change-major-mode-hook #'nk/scratch-apply-policy)
-  (add-hook 'after-revert-hook #'nk/scratch-apply-policy)
-  ;; If Flycheck ever gets enabled later, re-apply scratch policy immediately.
-  (after! flycheck
-    (add-hook 'flycheck-mode-hook
-              (lambda ()
-                (when (nk/scratch-buffer-p)
-                  (nk/scratch-apply-policy)))))
-
-  ;; Make sure the *scratch* buffer that already exists gets polished too.
-  (with-current-buffer (get-buffer-create "*scratch*")
-    (nk/scratch-apply-policy)
-    (nk/scratch-setup))
-
-  ;; If you use Evil, keep *scratch* in insert by default.
-  (after! evil
-    (add-hook! 'doom-first-buffer-hook
-      (when (get-buffer "*scratch*")
-        (with-current-buffer "*scratch*"
-          (evil-insert-state))))))
-
-;;; ---------------------------------------------------------------------------
-;;; IELM — make it feel like Lisp
-;;; ---------------------------------------------------------------------------
-
-(after! ielm
-  (setq ielm-prompt "λ "
-        ielm-dynamic-return t)
-
-  (add-hook 'ielm-mode-hook
-            (lambda ()
-              ;; Visual polish
-              (setq-local display-line-numbers nil)
-              (setq-local truncate-lines nil)
-              (visual-line-mode 1)
-
-              ;; Lisp vibes
-              (rainbow-delimiters-mode 1)
-
-              ;; Paren highlighting
-              (show-paren-mode 1)
-
-              ;; Make sure font-lock is actually on
-              (font-lock-mode 1)
-              (font-lock-flush)
-
-              ;; Optional: structured editing in the REPL
-              (when (fboundp 'smartparens-mode)
-                (smartparens-mode 1)))))
-
-;; If you use smartparens, this makes parens behave well in IELM
-(after! smartparens
-  (add-hook 'ielm-mode-hook #'smartparens-strict-mode))
-
-;;; ---------------------------------------------------------------------------
-;;; Eshell — control plane, not a POSIX cosplay
-;;; ---------------------------------------------------------------------------
-
-(defun nk/eshell-lisp-goodness ()
-  "Make Eshell feel like a Lisp buffer (rainbow parens, SP, etc), persistently."
-  (interactive)
-  ;; Keep it buffer-local and non-destructive to Eshell semantics.
-  (setq-local display-line-numbers nil)
-  (visual-line-mode 1)
-  (electric-pair-local-mode +1)
-  (show-paren-local-mode +1)
-
-  (when (fboundp 'smartparens-mode)
-    (smartparens-mode +1))
-  (when (fboundp 'rainbow-delimiters-mode)
-    (rainbow-delimiters-mode +1))
-
-  ;; Ensure faces apply after prompt/output changes.
-  (when (fboundp 'font-lock-flush)
-    (font-lock-flush)))
-
-(after! eshell
-  (setq eshell-banner-message ""
-        eshell-history-size 10000
-        eshell-hist-ignoredups t
-        eshell-scroll-to-bottom-on-input t
-        eshell-scroll-to-bottom-on-output t
-        eshell-prefer-lisp-functions t
-        eshell-highlight-prompt nil)
-
-  (add-hook 'eshell-mode-hook #'nk/eshell-lisp-goodness)
-
-  ;; Doom/Eshell can recreate buffers/prompts in a way that "loses" minor-mode feel.
-  ;; This re-applies the goodies after commands, without changing Eshell behavior.
-  (add-hook 'eshell-post-command-hook
-            (lambda ()
-              (when (derived-mode-p 'eshell-mode)
-                (nk/eshell-lisp-goodness)))))
-
-;;; ---------------------------------------------------------------------------
-;;; Runway utilities (tiny, composable, and worth keeping)
-;;; ---------------------------------------------------------------------------
-
-(defun nk/reload-config ()
-  "Reload Doom config (fast path)."
-  (interactive)
-  (if (fboundp 'doom/reload)
-      (doom/reload)
-    (load-file (expand-file-name "config.el" doom-user-dir))))
-
-(map! :leader
-      :desc "Reload Doom config" "h R" #'nk/reload-config)
-
-;; A tiny ELisp pretty-printer for when *scratch* is your lab.
-(defun nk/pp (expr)
-  "Pretty-print the value of EXPR into *pp*."
-  (interactive (list (read--expression "ELisp: ")))
-  (let ((buf (get-buffer-create "*pp*")))
-    (with-current-buffer buf
-      (let ((inhibit-read-only t))
-        (erase-buffer)
-        (pp (eval expr) buf)
-        (goto-char (point-min))
-        (special-mode)))
-    (display-buffer buf)))
-
-(map! :leader
-      :desc "Pretty-print ELisp" "e p" #'nk/pp)
-
-;; Mac port tuning
-(setq mac-command-modifier 'meta
-      mac-option-modifier 'super
-      mac-control-modifier 'control)
-
-;; Smooth scrolling
-;; NOTE: You intentionally keep pixel-precision scrolling OFF earlier for glassy stability.
-;; Leave it off here too (don't set the mode variable directly).
-
-;; Native fullscreen
-(setq ns-use-native-fullscreen t)
-
-;; Transparent titlebar (modern macOS)
-(setq ns-transparent-titlebar t)
-
-;; Metal rendering (Mac Port):
-;; Leave OFF for now; it can be crashy on some macOS/Emacs-mac combos.
-;; Once you're stable, we can re-enable and test deliberately.
-;; (when (boundp 'mac-use-metal)
-;;   (setq mac-use-metal t))
+  ;; (optional) also ensure it in clojure buffers explicitly
+  (add-hook 'clojure-mode-hook #'rainbow-delimiters-mode))

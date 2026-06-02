@@ -12,3 +12,6 @@
 
 (package! ember-theme
   :recipe (:host github :repo "ember-theme/emacs"))
+
+(package! ollama-buddy
+  :recipe (:host github :repo "captainflasmr/ollama-buddy"))
